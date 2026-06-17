@@ -8,11 +8,16 @@ import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
 from src.agents.personal_financial_advisor import personal_financial_advisor_agent
+from src.agents.intent_router import intent_router_agent
+from src.agents.rag_agent import rag_agent
+from src.agents.stock_discovery_agent import stock_discovery_agent
+from src.agents.portfolio_analysis_agent import portfolio_analysis_agent
 from src.graph.state import AgentState
 from src.utils.display import print_trading_output
 from src.utils.analysts import ANALYST_ORDER, get_analyst_nodes, DEFAULT_PERSONALIZED_ANALYSTS
 from src.utils.progress import progress
 from src.utils.visualize import save_graph_as_png
+from langsmith import traceable
 from src.cli.input import (
     parse_cli_inputs,
 )
@@ -44,6 +49,7 @@ def parse_hedge_fund_response(response):
 
 
 ##### Run the Hedge Fund #####
+@traceable(name="run_hedge_fund")
 def run_hedge_fund(
     tickers: list[str],
     start_date: str,
@@ -95,6 +101,41 @@ def run_hedge_fund(
 
 def start(state: AgentState):
     """Initialize the workflow with the input message."""
+    return state
+
+
+# ── Intent Routing Functions ────────────────────────────────
+
+def route_intent(state: AgentState) -> str:
+    """Map routing_decision.intent to the entry node for each path."""
+    decision = state.get("routing_decision", {})
+    if isinstance(decision, dict):
+        return decision.get("intent", "general_finance")
+    return "general_finance"
+
+
+def route_from_pfa(state: AgentState):
+    """After PFA: go to END for strategy_advice, fan-out to analysts for stock_analysis."""
+    decision = state.get("routing_decision", {})
+    intent = decision.get("intent", "") if isinstance(decision, dict) else ""
+    if intent == "strategy_advice":
+        return END
+    return "fan_out_to_analysts"
+
+
+def route_from_risk_manager(state: AgentState) -> str:
+    """After risk_manager: go to portfolio_analysis_agent, portfolio_manager, or END."""
+    decision = state.get("routing_decision", {})
+    intent = decision.get("intent", "") if isinstance(decision, dict) else ""
+    if intent == "portfolio_analysis":
+        return "portfolio_analysis_agent"
+    elif intent == "stock_discovery":
+        return END
+    return "portfolio_manager"
+
+
+def fan_out(state: AgentState):
+    """Pass-through node that fans out to analysts + risk_manager via regular edges."""
     return state
 
 
@@ -236,6 +277,7 @@ def run_onboarding(
 
 def _logged_agent(agent_func, display_name):
     """Wrap an agent function with before/after logging."""
+    @traceable(name=display_name)
     def wrapper(state):
         print(f"\n{'='*60}")
         print(f"▶ Running: {display_name}")
@@ -262,11 +304,19 @@ def _logged_agent(agent_func, display_name):
 
 
 def create_personalized_workflow(selected_analysts=None):
-    """Create a workflow that starts with the Personal Financial Advisor,
-    then runs analyst agents, risk manager, and portfolio manager.
+    """Create a workflow with the Intent Router as entry point.
+
+    Routing paths:
+      portfolio_analysis → risk_manager → portfolio_analysis_agent → END
+      stock_analysis     → PFA → [analysts + risk_manager] → portfolio_manager → END
+      stock_discovery    → stock_discovery_agent → fundamental_analyst → risk_manager → END
+      strategy_advice    → PFA → END
+      general_finance    → rag_agent → END
     """
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
+    workflow.add_node("intent_router", _logged_agent(intent_router_agent, "Intent Router"))
+
     workflow.add_node(
         "personal_financial_advisor",
         _logged_agent(personal_financial_advisor_agent, "Personal Financial Advisor"),
@@ -289,26 +339,78 @@ def create_personalized_workflow(selected_analysts=None):
         "portfolio_manager",
         _logged_agent(portfolio_management_agent, "Portfolio Manager"),
     )
+    workflow.add_node(
+        "portfolio_analysis_agent",
+        _logged_agent(portfolio_analysis_agent, "Portfolio Analysis Agent"),
+    )
+    workflow.add_node(
+        "stock_discovery_agent",
+        _logged_agent(stock_discovery_agent, "Stock Discovery Agent"),
+    )
+    workflow.add_node(
+        "rag_agent",
+        _logged_agent(rag_agent, "RAG Agent"),
+    )
+    workflow.add_node("fan_out_to_analysts", fan_out)
 
-    workflow.add_edge("start_node", "personal_financial_advisor")
+    # ── Entry: start_node → intent_router ──
+    workflow.add_edge("start_node", "intent_router")
 
+    # ── Intent Router → conditional entry points ──
+    workflow.add_conditional_edges(
+        "intent_router",
+        route_intent,
+        {
+            "portfolio_analysis": "risk_management_agent",
+            "stock_analysis": "personal_financial_advisor",
+            "stock_discovery": "stock_discovery_agent",
+            "strategy_advice": "personal_financial_advisor",
+            "general_finance": "rag_agent",
+        },
+    )
+
+    # ── PFA → conditional (strategy_advice → END, stock_analysis → fan_out) ──
+    workflow.add_conditional_edges(
+        "personal_financial_advisor",
+        route_from_pfa,
+    )
+
+    # fan_out → analysts + risk_manager (parallel)
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
-        workflow.add_edge("personal_financial_advisor", node_name)
+        workflow.add_edge("fan_out_to_analysts", node_name)
+    workflow.add_edge("fan_out_to_analysts", "risk_management_agent")
 
-    workflow.add_edge("personal_financial_advisor", "risk_management_agent")
-
+    # analysts → portfolio_manager
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge(node_name, "portfolio_manager")
 
-    workflow.add_edge("risk_management_agent", "portfolio_manager")
+    # ── Risk Manager → conditional ──
+    workflow.add_conditional_edges(
+        "risk_management_agent",
+        route_from_risk_manager,
+    )
+
+    # ── Stock Discovery path ──
+    # stock_discovery_agent → fundamental_analyst_v2
+    for analyst_key in selected_analysts:
+        node_name = analyst_nodes[analyst_key][0]
+        if analyst_key == "fundamental_analyst_v2":
+            workflow.add_edge("stock_discovery_agent", node_name)
+            # fundamental_analyst_v2 → risk_manager
+            workflow.add_edge(node_name, "risk_management_agent")
+            break
+
+    # ── Terminal edges ──
+    workflow.add_edge("portfolio_analysis_agent", END)
+    workflow.add_edge("rag_agent", END)
     workflow.add_edge("portfolio_manager", END)
 
     workflow.set_entry_point("start_node")
     return workflow
 
-
+@traceable(name="run_personalized_advisor")
 def run_personalized_advisor(
     tickers: list[str],
     start_date: str,
@@ -441,30 +543,38 @@ def run_personalized_advisor(
             )
             agent = workflow.compile()
 
-            final_state = agent.invoke({
-                "messages": [
-                    HumanMessage(
-                        content=user_message or "Make trading decisions based on the provided data.",
-                    )
-                ],
-                "data": {
-                    "tickers": tickers,
-                    "portfolio": merged_portfolio,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "analyst_signals": {},
-                },
-                "metadata": {
-                    "show_reasoning": show_reasoning,
-                    "model_name": model_name,
-                    "model_provider": model_provider,
-                },
-                "user_profile": user_profile,
-                "portfolio": user_portfolio,
-                "memory": semantic_memories,
-                "conversation_context": conversation_context,
-                "question": user_message or "",
-            })
+            try:
+                final_state = agent.invoke({
+                    "messages": [
+                        HumanMessage(
+                            content=user_message or "Make trading decisions based on the provided data.",
+                        )
+                    ],
+                    "data": {
+                        "tickers": tickers,
+                        "portfolio": merged_portfolio,
+                        "start_date": start_date,
+                        "end_date": end_date,
+                        "analyst_signals": {},
+                    },
+                    "metadata": {
+                        "show_reasoning": show_reasoning,
+                        "model_name": model_name,
+                        "model_provider": model_provider,
+                    },
+                    "user_profile": user_profile,
+                    "portfolio": user_portfolio,
+                    "memory": semantic_memories,
+                    "conversation_context": conversation_context,
+                    "question": user_message or "",
+                })
+            except Exception as e:
+                print(f"\n{'='*60}")
+                print(f"!!! Error during graph execution: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"{'='*60}\n")
+                raise
 
             # ── 7. Store assistant response in conversation memory ──
             response_text = str(final_state["messages"][-1].content)

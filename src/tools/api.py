@@ -21,6 +21,7 @@ from src.data.models import (
     InsiderTradeResponse,
     CompanyFactsResponse,
 )
+from langsmith import traceable
 
 # Global cache instance
 _cache = get_cache()
@@ -59,7 +60,7 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         # Return the response (whether success, other errors, or final 429)
         return response
 
-
+@traceable
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
     """Fetch price data from cache or API."""
     # Create a cache key that includes all parameters to ensure exact matches
@@ -82,6 +83,7 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     response = _make_api_request(url, headers)
     print(f"   [get_prices] Response status: {response.status_code}")
     if response.status_code != 200:
+        logger.warning("get_prices failed for %s: status=%d body=%s", ticker, response.status_code, response.text[:200])
         print(f"   [get_prices] FAILED — body: {response.text[:200]}")
         return []
 
@@ -103,7 +105,7 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     _cache.set_prices(cache_key, [p.model_dump() for p in prices])
     return prices
 
-
+@traceable
 def get_financial_metrics(
     ticker: str,
     end_date: str,
@@ -126,8 +128,12 @@ def get_financial_metrics(
         headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
+    print(f"   [get_financial_metrics] URL: {url}")
     response = _make_api_request(url, headers)
+    print(f"   [get_financial_metrics] Response status: {response.status_code}")
     if response.status_code != 200:
+        logger.warning("get_financial_metrics failed for %s: status=%d body=%s", ticker, response.status_code, response.text[:200])
+        print(f"   [get_financial_metrics] FAILED — body: {response.text[:200]}")
         return []
 
     # Parse response with Pydantic model
@@ -136,16 +142,20 @@ def get_financial_metrics(
         financial_metrics = metrics_response.financial_metrics
     except Exception as e:
         logger.warning("Failed to parse financial metrics response for %s: %s", ticker, e)
+        print(f"   [get_financial_metrics] Parse error: {e}")
         return []
 
     if not financial_metrics:
+        logger.warning("get_financial_metrics empty response for %s", ticker)
+        print(f"   [get_financial_metrics] Empty metrics array in response")
         return []
 
-    # Cache the results as dicts using the comprehensive cache key
+    print(f"   [get_financial_metrics] Got {len(financial_metrics)} metric records")
     _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
     return financial_metrics
 
 
+@traceable
 def search_line_items(
     ticker: str,
     line_items: list[str],
@@ -155,13 +165,14 @@ def search_line_items(
     api_key: str = None,
 ) -> list[LineItem]:
     """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
     if financial_api_key:
         headers["X-API-KEY"] = financial_api_key
 
     url = "https://api.financialdatasets.ai/financials/search/line-items"
+    print(f"   [search_line_items] URL: {url}")
+    print(f"   [search_line_items] ticker={ticker} line_items={line_items}")
 
     body = {
         "tickers": [ticker],
@@ -171,7 +182,10 @@ def search_line_items(
         "limit": limit,
     }
     response = _make_api_request(url, headers, method="POST", json_data=body)
+    print(f"   [search_line_items] Response status: {response.status_code}")
     if response.status_code != 200:
+        logger.warning("search_line_items failed for %s: status=%d body=%s", ticker, response.status_code, response.text[:200])
+        print(f"   [search_line_items] FAILED — body: {response.text[:200]}")
         return []
     
     try:
@@ -180,11 +194,13 @@ def search_line_items(
         search_results = response_model.search_results
     except Exception as e:
         logger.warning("Failed to parse line items response for %s: %s", ticker, e)
+        print(f"   [search_line_items] Parse error: {e}")
         return []
     if not search_results:
+        print(f"   [search_line_items] Empty results array")
         return []
 
-    # Cache the results
+    print(f"   [search_line_items] Got {len(search_results)} results")
     return search_results[:limit]
 
 
@@ -218,8 +234,12 @@ def get_insider_trades(
             url += f"&filing_date_gte={start_date}"
         url += f"&limit={limit}"
 
+        print(f"   [get_insider_trades] URL: {url}")
         response = _make_api_request(url, headers)
+        print(f"   [get_insider_trades] Response status: {response.status_code}")
         if response.status_code != 200:
+            logger.warning("get_insider_trades failed for %s: status=%d body=%s", ticker, response.status_code, response.text[:200])
+            print(f"   [get_insider_trades] FAILED — body: {response.text[:200]}")
             break
 
         try:
@@ -228,6 +248,7 @@ def get_insider_trades(
             insider_trades = response_model.insider_trades
         except Exception as e:
             logger.warning("Failed to parse insider trades response for %s: %s", ticker, e)
+            print(f"   [get_insider_trades] Parse error: {e}")
             break
 
         if not insider_trades:
@@ -253,7 +274,7 @@ def get_insider_trades(
     _cache.set_insider_trades(cache_key, [trade.model_dump() for trade in all_trades])
     return all_trades
 
-
+@traceable
 def get_company_news(
     ticker: str,
     end_date: str,
@@ -290,6 +311,7 @@ def get_company_news(
         response = _make_api_request(url, headers)
         print(f"   [get_company_news] Response status: {response.status_code}")
         if response.status_code != 200:
+            logger.warning("get_company_news failed for %s: status=%d body=%s", ticker, response.status_code, response.text[:200])
             print(f"   [get_company_news] FAILED — body: {response.text[:200]}")
             break
 
@@ -329,37 +351,49 @@ def get_company_news(
     return all_news
 
 
+@traceable
 def get_market_cap(
     ticker: str,
     end_date: str,
     api_key: str = None,
 ) -> float | None:
     """Fetch market cap from the API."""
-    # Check if end_date is today
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
-        # Get the market cap from company facts API
         headers = {}
         financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
         if financial_api_key:
             headers["X-API-KEY"] = financial_api_key
 
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
+        print(f"   [get_market_cap] URL: {url}")
         response = _make_api_request(url, headers)
+        print(f"   [get_market_cap] Response status: {response.status_code}")
         if response.status_code != 200:
-            print(f"Error fetching company facts: {ticker} - {response.status_code}")
+            logger.warning("get_market_cap (facts) failed for %s: status=%d body=%s", ticker, response.status_code, response.text[:200])
+            print(f"   [get_market_cap] FAILED — body: {response.text[:200]}")
             return None
 
-        data = response.json()
-        response_model = CompanyFactsResponse(**data)
-        return response_model.company_facts.market_cap
+        try:
+            data = response.json()
+            response_model = CompanyFactsResponse(**data)
+            mc = response_model.company_facts.market_cap
+            print(f"   [get_market_cap] market_cap={mc}")
+            return mc
+        except Exception as e:
+            logger.warning("Failed to parse company facts response for %s: %s", ticker, e)
+            print(f"   [get_market_cap] Parse error: {e}")
+            return None
 
     financial_metrics = get_financial_metrics(ticker, end_date, api_key=api_key)
     if not financial_metrics:
+        print(f"   [get_market_cap] No financial metrics for {ticker}")
         return None
 
     market_cap = financial_metrics[0].market_cap
+    print(f"   [get_market_cap] market_cap={market_cap} (from financial_metrics)")
 
     if not market_cap:
+        print(f"   [get_market_cap] market_cap is None/empty")
         return None
 
     return market_cap

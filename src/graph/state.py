@@ -5,6 +5,7 @@ from langchain_core.messages import BaseMessage
 
 
 import json
+from typing import Optional
 
 
 def merge_dicts(a: dict[str, any], b: dict[str, any]) -> dict[str, any]:
@@ -23,6 +24,9 @@ class AgentState(TypedDict):
     memory: Annotated[list[str], operator.add]                 # from ChromaDB (semantic)
     conversation_context: Annotated[list[str], operator.add]   # from ChromaDB (recent)
     question: str                                              # user's current question
+
+    # ── Intent Routing ────────────────────────────────────────
+    routing_decision: Optional[dict]                           # RoutingDecision from intent_router
 
 
 def show_agent_reasoning(output, agent_name):

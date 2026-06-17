@@ -16,6 +16,8 @@ from typing import Optional, List
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
+from langsmith import traceable
+
 
 
 # Collection names
@@ -96,7 +98,7 @@ class MemoryService:
         return doc_id
 
     # ── Retrieve ──────────────────────────────────────────────
-
+    @traceable
     def get_relevant_memories(self, user_id: str, query: str, limit: int = 5) -> List[str]:
         """Retrieve the most semantically relevant memories across all collections."""
         memories = []
