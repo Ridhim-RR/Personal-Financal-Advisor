@@ -234,13 +234,43 @@ def run_onboarding(
 
 # ── Recommendation Flow ──────────────────────────────────────
 
+def _logged_agent(agent_func, display_name):
+    """Wrap an agent function with before/after logging."""
+    def wrapper(state):
+        print(f"\n{'='*60}")
+        print(f"▶ Running: {display_name}")
+        print(f"   Tickers: {state['data'].get('tickers', [])}")
+        if state.get('question'):
+            print(f"   Question: {state['question']}")
+        print(f"{'='*60}")
+        result = agent_func(state)
+        print(f"\n{'='*60}")
+        print(f"◀ Finished: {display_name}")
+        print(f"   Messages: {len(result.get('messages', []))} total")
+        data = result.get("data", {})
+        new_keys = [k for k in data if k not in state.get("data", {}) or data[k] != state["data"].get(k)]
+        if new_keys:
+            print(f"   State keys updated: {new_keys}")
+        if data.get("advisor_context"):
+            print(f"   advisor_context: {data['advisor_context']}")
+        for agent_id, signals in data.get("analyst_signals", {}).items():
+            if agent_id.startswith(display_name.lower().replace(" ", "_").split("_")[0]):
+                print(f"   Signals ({agent_id}): {signals}")
+        print(f"{'='*60}\n")
+        return result
+    return wrapper
+
+
 def create_personalized_workflow(selected_analysts=None):
     """Create a workflow that starts with the Personal Financial Advisor,
     then runs analyst agents, risk manager, and portfolio manager.
     """
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
-    workflow.add_node("personal_financial_advisor", personal_financial_advisor_agent)
+    workflow.add_node(
+        "personal_financial_advisor",
+        _logged_agent(personal_financial_advisor_agent, "Personal Financial Advisor"),
+    )
 
     analyst_nodes = get_analyst_nodes()
 
@@ -249,10 +279,16 @@ def create_personalized_workflow(selected_analysts=None):
 
     for analyst_key in selected_analysts:
         node_name, node_func = analyst_nodes[analyst_key]
-        workflow.add_node(node_name, node_func)
+        workflow.add_node(node_name, _logged_agent(node_func, node_name))
 
-    workflow.add_node("risk_management_agent", risk_management_agent)
-    workflow.add_node("portfolio_manager", portfolio_management_agent)
+    workflow.add_node(
+        "risk_management_agent",
+        _logged_agent(risk_management_agent, "Risk Management Agent"),
+    )
+    workflow.add_node(
+        "portfolio_manager",
+        _logged_agent(portfolio_management_agent, "Portfolio Manager"),
+    )
 
     workflow.add_edge("start_node", "personal_financial_advisor")
 
@@ -296,6 +332,12 @@ def run_personalized_advisor(
     7. Store recommendation log in PostgreSQL
     8. Store new memory in ChromaDB
     """
+    # ── Default empty dates to last 6 months ──
+    if not end_date:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+    if not start_date:
+        start_date = (datetime.now() - relativedelta(months=6)).strftime("%Y-%m-%d")
+
     progress.start()
 
     db = _get_db()
@@ -354,6 +396,13 @@ def run_personalized_advisor(
                     "target_allocation": {},
                 }
 
+            # ── 2c. If user asks about portfolio, use their holdings as tickers ──
+            if user_message and "portfolio" in user_message.lower():
+                portfolio_tickers = list(user_portfolio.get("positions", {}).keys())
+                if portfolio_tickers:
+                    print(f"   Overriding tickers with portfolio holdings: {portfolio_tickers}")
+                    tickers = portfolio_tickers
+
             # ── 3. Retrieve relevant memories from ChromaDB ──
             semantic_memories = []
             if user_id and user_message:
@@ -378,6 +427,15 @@ def run_personalized_advisor(
                 merged_portfolio["positions"] = user_portfolio.get("positions", {})
 
             # ── 6. Build LangGraph state and execute ──
+            print(f"\n{'='*60}")
+            print("▶ PRE-GRAPH STATE CHECK")
+            print(f"{'='*60}")
+            print("USER PORTFOLIO")
+            print(json.dumps(user_portfolio, indent=2, default=str))
+            print("\nREQUEST TICKERS")
+            print(tickers)
+            print(f"{'='*60}\n")
+
             workflow = create_personalized_workflow(
                 selected_analysts if selected_analysts is not None else DEFAULT_PERSONALIZED_ANALYSTS
             )

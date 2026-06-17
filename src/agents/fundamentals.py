@@ -10,6 +10,9 @@ from src.tools.api import get_financial_metrics
 ##### Fundamental Agent #####
 def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_analyst_agent"):
     """Analyzes fundamental data and generates trading signals for multiple tickers."""
+    print("Running Fundamental Agent")
+    print(state["data"]["tickers"])
+
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
@@ -156,6 +159,11 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
     state["data"]["analyst_signals"][agent_id] = fundamental_analysis
 
     progress.update_status(agent_id, None, "Done")
+
+    result = fundamental_agent(state)
+
+    print("Fundamental Result")
+    print(result)
     
     return {
         "messages": [message],

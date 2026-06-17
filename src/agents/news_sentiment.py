@@ -45,6 +45,7 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
     question = state.get("question", "")
     advisor_context = data.get("advisor_context", {})
 
+    print(f"   [NewsSentiment] end_date={end_date!r}, API key: {'SET' if api_key else 'fallback to env'}")
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching company news")
         company_news = get_company_news(
@@ -55,6 +56,11 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
         )
 
         company_news = company_news or []
+        print(f"   [NewsSentiment] {ticker}: got {len(company_news)} articles")
+        if company_news:
+            print(f"   [NewsSentiment] {ticker}: first title: {company_news[0].title[:80] if hasattr(company_news[0], 'title') else 'N/A'}")
+        else:
+            print(f"   [NewsSentiment] {ticker}: NO ARTICLES — end_date={end_date!r}")
         news_signals = []
         sentiment_confidences = {}  # Store confidence scores for each article
         sentiments_classified_by_llm = 0

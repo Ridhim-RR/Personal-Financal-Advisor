@@ -72,12 +72,17 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+    has_key = "YES" if financial_api_key else "NO"
     if financial_api_key:
         headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
+    print(f"   [get_prices] URL: {url}")
+    print(f"   [get_prices] API key present: {has_key}")
     response = _make_api_request(url, headers)
+    print(f"   [get_prices] Response status: {response.status_code}")
     if response.status_code != 200:
+        print(f"   [get_prices] FAILED — body: {response.text[:200]}")
         return []
 
     # Parse response with Pydantic model
@@ -86,11 +91,14 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
         prices = price_response.prices
     except Exception as e:
         logger.warning("Failed to parse price response for %s: %s", ticker, e)
+        print(f"   [get_prices] Parse error: {e}")
         return []
 
     if not prices:
+        print(f"   [get_prices] Empty prices array in response")
         return []
 
+    print(f"   [get_prices] Got {len(prices)} price records")
     # Cache the results using the comprehensive cache key
     _cache.set_prices(cache_key, [p.model_dump() for p in prices])
     return prices
@@ -276,8 +284,13 @@ def get_company_news(
             url += f"&start_date={start_date}"
         url += f"&limit={limit}"
 
+        api_key_log = financial_api_key[:8] + "..." if financial_api_key and len(financial_api_key) > 8 else ("SET" if financial_api_key else "NONE")
+        print(f"   [get_company_news] URL: {url}")
+        print(f"   [get_company_news] API key: {api_key_log}")
         response = _make_api_request(url, headers)
+        print(f"   [get_company_news] Response status: {response.status_code}")
         if response.status_code != 200:
+            print(f"   [get_company_news] FAILED — body: {response.text[:200]}")
             break
 
         try:
@@ -289,8 +302,10 @@ def get_company_news(
             break
 
         if not company_news:
+            print(f"   [get_company_news] Empty news array in page, stopping")
             break
 
+        print(f"   [get_company_news] Got {len(company_news)} articles in this page")
         all_news.extend(company_news)
 
         # Only continue pagination if we have a start_date and got a full page
@@ -305,8 +320,10 @@ def get_company_news(
             break
 
     if not all_news:
+        print(f"   [get_company_news] Total articles: 0 — returning empty")
         return []
 
+    print(f"   [get_company_news] Total articles: {len(all_news)} — caching and returning")
     # Cache the results using the comprehensive cache key
     _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
     return all_news

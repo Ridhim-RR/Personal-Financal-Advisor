@@ -52,6 +52,7 @@ Thumbs.db
 
 # Frontend
 node_modules
+.next
 
 # Outputs
 outputs/

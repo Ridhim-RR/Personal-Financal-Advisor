@@ -57,6 +57,16 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
             api_key=api_key,
         )
 
+        print(f"\n  [Risk] {ticker}: PRICE DATA")
+        print(f"  [Risk] {ticker}: type={type(prices).__name__}, len={len(prices) if prices else 0}")
+        if prices and len(prices) > 0:
+            print(f"  [Risk] {ticker}: first date={prices[0].time if hasattr(prices[0], 'time') else 'N/A'}")
+            print(f"  [Risk] {ticker}: last date={prices[-1].time if hasattr(prices[-1], 'time') else 'N/A'}")
+            print(f"  [Risk] {ticker}: first close={prices[0].close if hasattr(prices[0], 'close') else 'N/A'}")
+            print(f"  [Risk] {ticker}: last close={prices[-1].close if hasattr(prices[-1], 'close') else 'N/A'}")
+        else:
+            print(f"  [Risk] {ticker}: NO PRICE DATA — will use fallback volatility")
+
         if not prices:
             progress.update_status(agent_id, ticker, "Warning: No price data found")
             volatility_data[ticker] = {

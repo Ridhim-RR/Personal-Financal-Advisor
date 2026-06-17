@@ -30,11 +30,15 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
     analysis_data = {}
     technical_analysis = {}
 
+    print(f"   [Technical] start_date={start_date!r}, end_date={end_date!r}")
+    print(f"   [Technical] API key from state: {'SET' if api_key else 'None (will try env var)'}")
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching price data")
 
         prices = get_prices(ticker, start_date, end_date, api_key=api_key)
+        print(f"   [Technical] {ticker}: got {len(prices) if prices else 0} prices")
         if not prices or len(prices) < 50:
+            print(f"   [Technical] {ticker}: SKIPPING — only {len(prices) if prices else 0} prices, need >= 50")
             progress.update_status(agent_id, ticker, "Insufficient price data")
             continue
 
