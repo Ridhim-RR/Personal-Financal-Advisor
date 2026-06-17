@@ -1,10 +1,9 @@
 from langchain_core.messages import HumanMessage
 from src.graph.state import AgentState, show_agent_reasoning
-from src.utils.api_key import get_api_key_from_state
 from src.utils.progress import progress
 import json
 
-from src.tools.api import get_financial_metrics
+from app.backend.services.market_data_provider import get_financial_metrics
 
 
 ##### Fundamental Agent #####
@@ -16,8 +15,6 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
-    # Initialize fundamental analysis for each ticker
     fundamental_analysis = {}
 
     for ticker in tickers:
@@ -29,7 +26,6 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
             end_date=end_date,
             period="ttm",
             limit=10,
-            api_key=api_key,
         )
 
         if not financial_metrics:

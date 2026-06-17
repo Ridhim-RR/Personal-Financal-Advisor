@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 
 from src.graph.state import AgentState, show_agent_reasoning
-from src.tools.api import get_prices, prices_to_df
+from src.tools.api import prices_to_df
+from app.backend.services.market_data_provider import get_prices
 from src.utils.llm import call_llm
 from src.utils.progress import progress
-from src.utils.api_key import get_api_key_from_state
 
 
 class TechnicalAnalystSignal(BaseModel):
@@ -25,17 +25,15 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
     start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
 
     analysis_data = {}
     technical_analysis = {}
 
     print(f"   [Technical] start_date={start_date!r}, end_date={end_date!r}")
-    print(f"   [Technical] API key from state: {'SET' if api_key else 'None (will try env var)'}")
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching price data")
 
-        prices = get_prices(ticker, start_date, end_date, api_key=api_key)
+        prices = get_prices(ticker, start_date, end_date)
         print(f"   [Technical] {ticker}: got {len(prices) if prices else 0} prices")
         if not prices or len(prices) < 50:
             print(f"   [Technical] {ticker}: SKIPPING — only {len(prices) if prices else 0} prices, need >= 50")

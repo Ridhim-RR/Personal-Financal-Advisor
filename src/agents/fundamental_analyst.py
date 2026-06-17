@@ -5,10 +5,9 @@ from typing_extensions import Literal
 import json
 
 from src.graph.state import AgentState, show_agent_reasoning
-from src.tools.api import get_financial_metrics, search_line_items, get_market_cap
+from app.backend.services.market_data_provider import get_financial_metrics, get_market_cap, search_line_items
 from src.utils.llm import call_llm
 from src.utils.progress import progress
-from src.utils.api_key import get_api_key_from_state
 
 
 class FundamentalAnalystSignal(BaseModel):
@@ -24,7 +23,6 @@ def fundamental_analyst_agent(state: AgentState, agent_id: str = "fundamental_an
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
 
     analysis_data = {}
     fundamental_analysis = {}
@@ -32,7 +30,7 @@ def fundamental_analyst_agent(state: AgentState, agent_id: str = "fundamental_an
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
 
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         line_items = search_line_items(
@@ -49,11 +47,10 @@ def fundamental_analyst_agent(state: AgentState, agent_id: str = "fundamental_an
             end_date,
             period="ttm",
             limit=5,
-            api_key=api_key,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date)
 
         progress.update_status(agent_id, ticker, "Analyzing profitability")
         profitability = _analyze_profitability(metrics)

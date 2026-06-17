@@ -10,17 +10,18 @@ import numpy as np
 import pandas as pd
 
 from src.tools.api import (
+    prices_to_df,
+)
+from app.backend.services.market_data_provider import (
     get_company_news,
     get_financial_metrics,
     get_insider_trades,
     get_market_cap,
     get_prices,
-    prices_to_df,
     search_line_items,
 )
 from src.utils.llm import call_llm
 from src.utils.progress import progress
-from src.utils.api_key import get_api_key_from_state
 
 
 class NassimTalebSignal(BaseModel):
@@ -34,8 +35,6 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
-
     # Look one year back for insider trades and news
     start_date = (datetime.fromisoformat(end_date) - timedelta(days=365)).date().isoformat()
 
@@ -44,11 +43,11 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching price data")
-        prices = get_prices(ticker, start_date, end_date, api_key=api_key)
+        prices = get_prices(ticker, start_date, end_date)
         prices_df = prices_to_df(prices) if prices else pd.DataFrame()
 
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         line_items = search_line_items(
@@ -69,7 +68,6 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
             end_date,
             period="ttm",
             limit=5,
-            api_key=api_key,
         )
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
@@ -79,7 +77,7 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
         news = get_company_news(ticker, end_date=end_date, start_date=start_date, limit=100)
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date)
 
         # Run sub-analyses
         progress.update_status(agent_id, ticker, "Analyzing tail risk")

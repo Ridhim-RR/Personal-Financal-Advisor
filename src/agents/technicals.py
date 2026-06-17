@@ -3,12 +3,12 @@ import math
 from langchain_core.messages import HumanMessage
 
 from src.graph.state import AgentState, show_agent_reasoning
-from src.utils.api_key import get_api_key_from_state
 import json
 import pandas as pd
 import numpy as np
 
-from src.tools.api import get_prices, prices_to_df
+from src.tools.api import prices_to_df
+from app.backend.services.market_data_provider import get_prices
 from src.utils.progress import progress
 
 
@@ -45,8 +45,6 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
     start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
-    # Initialize analysis for each ticker
     technical_analysis = {}
 
     for ticker in tickers:
@@ -57,7 +55,6 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
             ticker=ticker,
             start_date=start_date,
             end_date=end_date,
-            api_key=api_key,
         )
 
         if not prices:
