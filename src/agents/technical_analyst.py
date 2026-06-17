@@ -226,6 +226,9 @@ def _generate_output(
     state: AgentState,
     agent_id: str,
 ) -> TechnicalAnalystSignal:
+    question = state.get("question", "")
+    advisor_context = state.get("data", {}).get("advisor_context", {})
+
     template = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -239,6 +242,8 @@ def _generate_output(
         ),
         (
             "human",
+            "User request: {question}\n"
+            "Advisor context: {advisor_context}\n\n"
             "Analyze {ticker}:\n{analysis_data}\n\n"
             'Return: {{"signal": "bullish"|"bearish"|"neutral", "confidence": int, "reasoning": "..."}}',
         ),
@@ -247,6 +252,8 @@ def _generate_output(
     prompt = template.invoke({
         "analysis_data": json.dumps(analysis_data, indent=2),
         "ticker": ticker,
+        "question": question or "No specific request",
+        "advisor_context": json.dumps(advisor_context) if advisor_context else "No advisor context",
     })
 
     def default():

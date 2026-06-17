@@ -1,3 +1,5 @@
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -25,10 +27,13 @@ async def chat(
     svc = __import__("src.services.portfolio_service", fromlist=[""]).PortfolioService(session)
     portfolio = svc.get_holdings_dict(user_id)
 
+    end_date = body.end_date or datetime.now().strftime("%Y-%m-%d")
+    start_date = body.start_date or (datetime.now() - relativedelta(months=3)).strftime("%Y-%m-%d")
+
     result = run_personalized_advisor(
         tickers=body.tickers,
-        start_date=body.start_date or "",
-        end_date=body.end_date or "",
+        start_date=start_date,
+        end_date=end_date,
         portfolio=portfolio,
         user_id=user_id,
         user_message=body.message,

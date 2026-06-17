@@ -48,6 +48,9 @@ class DatabaseManager:
             RecommendationLogORM, HoldingORM, AlertORM,
             TransactionORM, AgentAnalysisORM,
         )
+        from app.backend.database.models import (  # noqa: F401 – registers hedge fund flow models
+            HedgeFundFlow, HedgeFundFlowRun, HedgeFundFlowRunCycle, ApiKey,
+        )
         Base.metadata.create_all(self._engine)
 
     def disconnect(self) -> None:

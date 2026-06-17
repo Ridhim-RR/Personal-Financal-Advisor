@@ -212,12 +212,18 @@ def generate_trading_decision(
     user_profile = state.get("user_profile", {})
     user_portfolio = state.get("portfolio", {})
     target_alloc = user_portfolio.get("target_allocation", {})
+    question = state.get("question", "")
+    advisor_context = state.get("data", {}).get("advisor_context", {})
 
     profile_context = (
         f"User risk: {user_profile.get('risk_appetite', 'moderate')} | "
         f"Goal: {user_profile.get('investment_goal', 'growth')} | "
         f"Target allocation: {json.dumps(target_alloc) if target_alloc else 'not set'}"
     )
+    if question:
+        profile_context += f" | Request: {question}"
+    if advisor_context:
+        profile_context += f" | Advisor context: {json.dumps(advisor_context)}"
 
     template = ChatPromptTemplate.from_messages(
         [

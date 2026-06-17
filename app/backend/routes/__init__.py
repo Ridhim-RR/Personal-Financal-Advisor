@@ -8,11 +8,17 @@ from app.backend.routes.flow_runs import router as flow_runs_router
 from app.backend.routes.ollama import router as ollama_router
 from app.backend.routes.language_models import router as language_models_router
 from app.backend.routes.api_keys import router as api_keys_router
+from app.backend.routes.auth import router as auth_router
+from app.backend.routes.users import router as users_router
+from app.backend.routes.chat import router as chat_router
+from app.backend.routes.portfolio import router as portfolio_router
+from app.backend.routes.watchlists import router as watchlists_router
+from app.backend.routes.recommendations import router as recommendations_router
+from app.backend.routes.alerts import router as alerts_router
+from app.backend.routes.transactions import router as transactions_router
 
-# Main API router
-api_router = APIRouter()
+api_router = APIRouter(prefix="/api/v1")
 
-# Include sub-routers
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(hedge_fund_router, tags=["hedge-fund"])
 api_router.include_router(storage_router, tags=["storage"])
@@ -21,3 +27,11 @@ api_router.include_router(flow_runs_router, tags=["flow-runs"])
 api_router.include_router(ollama_router, tags=["ollama"])
 api_router.include_router(language_models_router, tags=["language-models"])
 api_router.include_router(api_keys_router, tags=["api-keys"])
+api_router.include_router(auth_router, tags=["auth"])
+api_router.include_router(users_router, tags=["users"])
+api_router.include_router(chat_router, tags=["chat"])
+api_router.include_router(portfolio_router, tags=["portfolio"])
+api_router.include_router(watchlists_router, tags=["watchlists"])
+api_router.include_router(recommendations_router, tags=["recommendations"])
+api_router.include_router(alerts_router, tags=["alerts"])
+api_router.include_router(transactions_router, tags=["transactions"])

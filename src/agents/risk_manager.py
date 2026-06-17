@@ -25,6 +25,8 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
     # ── User risk appetite from PostgreSQL profile ──
     user_profile = state.get("user_profile", {})
     risk_appetite = user_profile.get("risk_appetite", "moderate")
+    question = state.get("question", "")
+    advisor_context = state.get("data", {}).get("advisor_context", {})
 
     if risk_appetite == "conservative":
         max_position_size = 0.05
@@ -231,6 +233,10 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
         )
 
     progress.update_status(agent_id, None, "Done")
+
+    # Attach user context for downstream visibility
+    risk_analysis["_user_question"] = question or ""
+    risk_analysis["_advisor_context"] = advisor_context
 
     message = HumanMessage(
         content=json.dumps(risk_analysis),

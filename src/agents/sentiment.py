@@ -17,6 +17,8 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     # Initialize sentiment analysis for each ticker
     sentiment_analysis = {}
+    question = state.get("question", "")
+    advisor_context = data.get("advisor_context", {})
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching insider trades")
@@ -113,6 +115,8 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
             "signal": overall_signal,
             "confidence": confidence,
             "reasoning": reasoning,
+            "user_request": question or "",
+            "advisor_context": advisor_context,
         }
 
         progress.update_status(agent_id, ticker, "Done", analysis=json.dumps(reasoning, indent=4))

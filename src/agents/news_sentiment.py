@@ -42,6 +42,8 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
     tickers = data.get("tickers")
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     sentiment_analysis = {}
+    question = state.get("question", "")
+    advisor_context = data.get("advisor_context", {})
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching company news")
@@ -74,10 +76,14 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
                 # but this is more expensive and requires extracting the text from the article.
                 # Note: this is an opportunity for improvement!
                 progress.update_status(agent_id, ticker, f"Analyzing sentiment for article {idx + 1} of {len(articles_to_analyze)}")
+                user_context = f"\nUser request: {question}" if question else ""
+                advisor_summary = f"\nAdvisor context: {json.dumps(advisor_context)}" if advisor_context else ""
                 prompt = (
                     f"Please analyze the sentiment of the following news headline "
                     f"with the following context: "
                     f"The stock is {ticker}. "
+                    f"{user_context}"
+                    f"{advisor_summary}"
                     f"Determine if sentiment is 'positive', 'negative', or 'neutral' for the stock {ticker} only. "
                     f"Also provide a confidence score for your prediction from 0 to 100. "
                     f"Respond in JSON format.\n\n"

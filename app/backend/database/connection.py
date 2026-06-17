@@ -1,32 +1,27 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-import os
-from pathlib import Path
+from typing import Generator
+from sqlalchemy.orm import Session
 
-# Get the backend directory path
-BACKEND_DIR = Path(__file__).parent.parent
-DATABASE_PATH = BACKEND_DIR / "hedge_fund.db"
+from src.db.connection import DatabaseManager, Base
 
-# Database configuration - use absolute path
-DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
+_db_manager: DatabaseManager = None
 
-# Create SQLAlchemy engine
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}  # Needed for SQLite
-)
 
-# Create SessionLocal class
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def get_db_manager() -> DatabaseManager:
+    global _db_manager
+    if _db_manager is None:
+        _db_manager = DatabaseManager()
+        _db_manager.connect()
+    return _db_manager
 
-# Create Base class for models
-Base = declarative_base()
 
-# Dependency for FastAPI
-def get_db():
-    db = SessionLocal()
+def get_db() -> Generator[Session, None, None]:
+    manager = get_db_manager()
+    session = manager._session_factory()
     try:
-        yield db
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
-        db.close() 
+        session.close()

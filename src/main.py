@@ -51,8 +51,8 @@ def run_hedge_fund(
     portfolio: dict,
     show_reasoning: bool = False,
     selected_analysts: list[str] = [],
-    model_name: str = "gpt-4.1",
-    model_provider: str = "OpenAI",
+    model_name: str = "llama-3.3-70b-versatile",
+    model_provider: str = "Groq",
 ):
     # Start progress tracking
     progress.start()
@@ -119,10 +119,11 @@ def create_workflow(selected_analysts=None):
     workflow.add_node("risk_management_agent", risk_management_agent)
     workflow.add_node("portfolio_manager", portfolio_management_agent)
 
-    # Connect selected analysts to risk management
+    workflow.add_edge("start_node", "risk_management_agent")
+
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
-        workflow.add_edge(node_name, "risk_management_agent")
+        workflow.add_edge(node_name, "portfolio_manager")
 
     workflow.add_edge("risk_management_agent", "portfolio_manager")
     workflow.add_edge("portfolio_manager", END)
@@ -259,9 +260,11 @@ def create_personalized_workflow(selected_analysts=None):
         node_name = analyst_nodes[analyst_key][0]
         workflow.add_edge("personal_financial_advisor", node_name)
 
+    workflow.add_edge("personal_financial_advisor", "risk_management_agent")
+
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
-        workflow.add_edge(node_name, "risk_management_agent")
+        workflow.add_edge(node_name, "portfolio_manager")
 
     workflow.add_edge("risk_management_agent", "portfolio_manager")
     workflow.add_edge("portfolio_manager", END)
@@ -279,8 +282,8 @@ def run_personalized_advisor(
     user_message: str = None,
     show_reasoning: bool = False,
     selected_analysts: list[str] = None,
-    model_name: str = "gpt-4.1",
-    model_provider: str = "OpenAI",
+    model_name: str = "llama-3.3-70b-versatile",
+    model_provider: str = "Groq",
 ):
     """Full hybrid-memory recommendation flow:
 
@@ -323,6 +326,32 @@ def run_personalized_advisor(
                         for t, h in holdings.items()
                     },
                     "target_allocation": target,
+                }
+
+            # ── 1b. Seed default user profile if empty ──
+            if not user_profile:
+                user_profile = {
+                    "risk_appetite": "moderate",
+                    "investment_goal": "growth",
+                    "investment_horizon": "medium",
+                    "preferred_sectors": ["Technology", "Healthcare"],
+                    "excluded_sectors": ["Energy"],
+                    "preferred_analysts": [],
+                    "initial_capital": 100000.0,
+                    "margin_requirement": 0.0,
+                }
+
+            # ── 2b. Seed dummy portfolio if user has no holdings ──
+            if not user_portfolio.get("positions"):
+                user_portfolio = {
+                    "cash": user_profile.get("initial_capital", 100000.0),
+                    "margin_requirement": user_profile.get("margin_requirement", 0.0),
+                    "positions": {
+                        "AAPL": {"long": 10, "avg_cost": 150.0},
+                        "MSFT": {"long": 5, "avg_cost": 350.0},
+                        "SPY": {"long": 20, "avg_cost": 450.0},
+                    },
+                    "target_allocation": {},
                 }
 
             # ── 3. Retrieve relevant memories from ChromaDB ──

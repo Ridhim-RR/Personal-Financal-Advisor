@@ -12,7 +12,7 @@ from src.utils.progress import progress
 class AdvisorContext(BaseModel):
     risk_profile: str = Field(description="Conservative / Moderate / Aggressive")
     recommended_strategy: str = Field(description="Strategy summary")
-    constraints: str = Field(description="Key constraints for other agents")
+    constraints: dict[str, str] = Field(description="Key constraints for other agents")
     reasoning: str = Field(description="Why this advice fits the user")
 
 
@@ -107,7 +107,7 @@ def _generate_advisor_context(context: dict, state: AgentState, agent_id: str) -
             '{{\n'
             '  "risk_profile": "...",\n'
             '  "recommended_strategy": "...",\n'
-            '  "constraints": "...",\n'
+            '  "constraints": {{"sector": "...", "position_sizing": "...", "volatility": "..."}},\n'
             '  "reasoning": "..."\n'
             "}}",
         ),
@@ -133,7 +133,7 @@ def _generate_advisor_context(context: dict, state: AgentState, agent_id: str) -
         return AdvisorContext(
             risk_profile="Moderate",
             recommended_strategy="Diversified growth",
-            constraints="Standard risk limits",
+            constraints={"sector": "any", "position_sizing": "medium"},
             reasoning="Default — no profile data",
         )
 
