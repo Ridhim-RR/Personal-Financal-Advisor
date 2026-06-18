@@ -1,157 +1,265 @@
-# AI Hedge Fund
+# Personal AI Financial Advisor
 
-This is a proof of concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
+A multi-agent AI-powered personal financial advisor with intent routing, hybrid memory, and dual market data providers. Built with LangGraph, FastAPI, and Next.js 14.
 
-This system employs several agents working together:
+This system is for **educational and research purposes only** — not intended for real trading or investment.
 
-1. Aswath Damodaran Agent - The Dean of Valuation, focuses on story, numbers, and disciplined valuation
-2. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
-3. Bill Ackman Agent - An activist investor, takes bold positions and pushes for change
-4. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
-5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-6. Michael Burry Agent - The Big Short contrarian who hunts for deep value
-7. Mohnish Pabrai Agent - The Dhandho investor, who looks for doubles at low risk
-8. Nassim Taleb Agent - The Black Swan risk analyst, focuses on tail risk, antifragility, and asymmetric payoffs
-9. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
-10. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
-11. Rakesh Jhunjhunwala Agent - The Big Bull of India
-12. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
-13. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-14. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-15. Sentiment Agent - Analyzes market sentiment and generates trading signals
-16. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-17. Technicals Agent - Analyzes technical indicators and generates trading signals
-18. Risk Manager - Calculates risk metrics and sets position limits
-19. Portfolio Manager - Makes final trading decisions and generates orders
+## Architecture Overview
 
-<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
-
-Note: the system does not actually make any trades.
-
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
-
-## Disclaimer
-
-This project is for **educational and research purposes only**.
-
-- Not intended for real trading or investment
-- No investment advice or guarantees provided
-- Creator assumes no liability for financial losses
-- Consult a financial advisor for investment decisions
-- Past performance does not indicate future results
-
-By using this software, you agree to use it solely for learning purposes.
-
-## Table of Contents
-- [How to Install](#how-to-install)
-- [How to Run](#how-to-run)
-  - [⌨️ Command Line Interface](#️-command-line-interface)
-  - [🖥️ Web Application](#️-web-application)
-- [How to Contribute](#how-to-contribute)
-- [Feature Requests](#feature-requests)
-- [License](#license)
-
-## How to Install
-
-Before you can run the AI Hedge Fund, you'll need to install it and set up your API keys. These steps are common to both the full-stack web application and command line interface.
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
+```
+User → Chat API → AgentState → LangGraph
+                                 │
+                        start_node
+                                 │
+                        Intent Router (LLM classifies)
+                                 │
+                        route_intent (conditional)
+                        /    |    |    |    \
+                  stock  port  disc  strat gen
+                  anal   anal  overy  ad    fin
 ```
 
-### 2. Set up API keys
+### Intent Routing
 
-Create a `.env` file for your API keys:
+The Intent Router (LLM-powered) classifies each user question into one of 5 intents:
+
+| Intent | Triggers | Workflow Path |
+|--------|----------|---------------|
+| `stock_analysis` | "Should I buy NVDA?" | PFA → Fan-out (4 analysts) → Risk Manager → Portfolio Manager |
+| `portfolio_analysis` | "Analyze my portfolio risk" | Risk Manager → Portfolio Analysis Agent |
+| `stock_discovery` | "Suggest small cap stocks" | Stock Discovery Agent |
+| `strategy_advice` | "How should I save for retirement?" | PFA (direct to END) |
+| `general_finance` | "What is a PE ratio?" | RAG Agent |
+
+The router also extracts tickers from the question and overrides any dummy frontend-supplied tickers.
+
+### Workflow Graph
+
+```
+start_node ──→ intent_router
+                  │
+                  │ (conditional: route_intent)
+                  ├──→ stock_analysis
+                  │       └──→ pfa ──→ fan_out ──→ 4 analysts ──→ risk_manager ──→ portfolio_manager ──→ END
+                  │                                          (valuation, fundamentals, technicals, sentiment)
+                  │
+                  ├──→ portfolio_analysis
+                  │       └──→ risk_manager ──→ portfolio_analysis_agent ──→ END
+                  │
+                  ├──→ stock_discovery
+                  │       └──→ stock_discovery_agent ──→ fundamentals ──→ risk_manager ──→ END
+                  │
+                  ├──→ strategy_advice
+                  │       └──→ pfa ──→ END
+                  │
+                  └──→ general_finance
+                          └──→ rag_agent ──→ END
+```
+
+### Agents (28 total)
+
+**Hedge Fund Analysts (14):**
+Aswath Damodaran, Ben Graham, Bill Ackman, Cathie Wood, Charlie Munger, Michael Burry, Mohnish Pabrai, Nassim Taleb, Peter Lynch, Phil Fisher, Rakesh Jhunjhunwala, Stanley Druckenmiller, Warren Buffett, Growth Analyst
+
+**Data Analysts (4):**
+Fundamentals Analyst, Technical Analyst, Valuation Analyst, Sentiment Analyst
+
+**Personal Advisor Agents (6):**
+Personal Financial Advisor, Risk Manager, Portfolio Manager, Portfolio Analysis Agent, Stock Discovery Agent, RAG Agent
+
+**System Agents (2):**
+Intent Router, News Sentiment Analyst
+
+### State Flow
+
+Every agent reads and writes to a shared `AgentState` dict:
+
+```python
+{
+  "question": str,
+  "data": {
+    "tickers": [...],
+    "portfolio": {...},
+    "analyst_signals": {},
+    "start_date": "...",
+    "end_date": "..."
+  },
+  "metadata": {"show_reasoning": bool, "model": str},
+  "routing_decision": {"intent": str, "tickers": [...], "confidence": float, ...}
+}
+```
+
+## Data Flow
+
+### Market Data Provider
+
+Unified data layer with try-Yahoo-then-fallback strategy:
+
+```
+Agent Code
+    │
+    ▼
+Module-level convenience functions
+(get_prices, get_financial_metrics, get_company_news, etc.)
+    │
+    ▼
+MarketDataProvider (orchestrator)
+    │
+    ├── YahooFinanceProvider (primary — free, ETFs work)
+    │       ├── yfinance.Ticker.history() → Price[]
+    │       ├── yfinance.Ticker.info → FinancialMetrics
+    │       └── yfinance.Ticker.news → CompanyNews[]
+    │
+    └── FinancialDatasetsProvider (fallback — paid, richer data)
+            ├── src.tools.api.get_prices()
+            ├── src.tools.api.get_financial_metrics()
+            ├── src.tools.api.get_company_news()
+            ├── src.tools.api.get_market_cap()
+            ├── src.tools.api.search_line_items()
+            └── src.tools.api.get_insider_trades()
+```
+
+- Yahoo Finance handles ETFs (SPY, QQQ, VOO, DIA) that FinancialDatasets.ai blocks with HTTP 402.
+- In-memory caching (`_PRICE_CACHE`, `_METRICS_CACHE`, `_NEWS_CACHE`) — cached per (ticker, date_range) key.
+- Agents never pass `api_key` — the provider reads `FINANCIAL_DATASETS_API_KEY` from `os.environ`.
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | FastAPI + Uvicorn |
+| **Frontend** | Next.js 14 + React 18 + TypeScript |
+| **AI Orchestration** | LangGraph (LangChain) |
+| **LLMs** | DeepSeek, Groq, Claude, GPT-4o, Ollama (local) |
+| **Market Data** | Yahoo Finance (primary) + FinancialDatasets.ai (fallback) |
+| **Database** | PostgreSQL / SQLite |
+| **Vector Store** | ChromaDB (conversation memory, user profiles) |
+| **Auth** | JWT (python-jose) + bcrypt |
+| **CI/Tracing** | LangSmith |
+
+## Project Structure
+
+```
+├── app/
+│   ├── backend/           # FastAPI backend
+│   │   ├── main.py        # App creation, CORS, startup
+│   │   ├── routes/        # API route handlers (chat, auth, portfolio, etc.)
+│   │   ├── services/      # Graph builder, market data provider, Ollama
+│   │   └── database/      # SQLAlchemy models + migrations
+│   └── frontend/          # Next.js 14 frontend
+│       └── src/
+│           ├── app/       # Pages (dashboard, advisor, portfolio, etc.)
+│           ├── components/# UI components
+│           └── lib/       # API client, utilities
+├── src/
+│   ├── main.py            # Workflow builder + CLI entry point
+│   ├── agents/            # 28 agent implementations
+│   ├── tools/             # Market data API tools (FinancialDatasets.ai)
+│   ├── data/              # Pydantic models (Price, FinancialMetrics, etc.)
+│   ├── graph/             # AgentState TypedDict
+│   ├── memory/            # ChromaDB vector store
+│   ├── db/                # User/portfolio ORM models
+│   ├── llm/               # Model configuration
+│   └── utils/             # Analysts config, display, LLM helper
+├── v2/                    # Quantitative pipeline (signals, risk, optimizer)
+└── docker/                # Docker Compose files
+```
+
+## Prerequisites
+
+- Python 3.12+
+- Node.js 18+
+- Poetry (`curl -sSL https://install.python-poetry.org | python3 -`)
+- API keys (see below)
+
+## Installation
+
+### 1. Clone and set up API keys
+
 ```bash
-# Create .env file for your API keys (in the root directory)
+git clone <repo-url>
+cd personal_financial_advisor
 cp .env.example .env
 ```
 
-Open and edit the `.env` file to add your API keys:
-```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
-OPENAI_API_KEY=your-openai-api-key
+Edit `.env` with your keys. At minimum, set one LLM key + `FINANCIAL_DATASETS_API_KEY`:
 
-# For getting financial data to power the hedge fund
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+```env
+OPENAI_API_KEY=sk-...
+# or
+DEEPSEEK_API_KEY=...
+# or
+GROQ_API_KEY=...
+
+FINANCIAL_DATASETS_API_KEY=your-key-here
 ```
 
-**Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
+### 2. Install backend dependencies
 
-## How to Run
-
-### ⌨️ Command Line Interface
-
-You can run the AI Hedge Fund directly via terminal. This approach offers more granular control and is useful for automation, scripting, and integration purposes.
-
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
-
-#### Quick Start
-
-1. Install Poetry (if not already installed):
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-2. Install dependencies:
 ```bash
 poetry install
 ```
 
-#### Run the AI Hedge Fund
+### 3. Install frontend dependencies
+
+```bash
+cd app/frontend
+npm install
+cd ../..
+```
+
+## Running
+
+### Start the backend
+
+```bash
+poetry run uvicorn app.backend.main:app --reload --port 8000
+```
+
+### Start the frontend (separate terminal)
+
+```bash
+cd app/frontend
+npm run dev
+```
+
+Open `http://localhost:3000`, register an account, and start chatting with the AI advisor.
+
+### CLI mode (standalone, no frontend)
+
 ```bash
 poetry run python src/main.py --ticker AAPL,MSFT,NVDA
 ```
 
-You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
+Optional flags: `--start-date`, `--end-date`, `--ollama` (for local LLMs), `--show-reasoning`.
 
-```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
-```
+### Backtesting
 
-You can optionally specify the start and end dates to make decisions over a specific time period.
-
-```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
-```
-
-#### Run the Backtester
 ```bash
 poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 ```
 
-**Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
+## API Endpoints
 
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/auth/register` | Create account |
+| POST | `/api/v1/auth/login` | Login (returns JWT) |
+| POST | `/api/v1/chat/` | Chat with AI advisor |
+| GET | `/api/v1/portfolio/` | Get portfolio holdings |
+| POST | `/api/v1/portfolio/holdings` | Add holding |
+| GET | `/api/v1/recommendations/history` | Past recommendations |
+| GET | `/api/v1/users/me` | Current user profile |
 
-Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester, as well!
+## Key Design Decisions
 
-### 🖥️ Web Application
+1. **Intent Router as entry point** — Only executes agents relevant to the user's intent, saving tokens and reducing latency.
+2. **Yahoo Finance primary** — Free and handles ETFs (SPY, QQQ, VOO) that FinancialDatasets.ai blocks on free tier.
+3. **Router extracts tickers** — The LLM extracts tickers from natural language ("should I buy NVIDIA?" → NVDA), overriding any frontend-supplied defaults.
+4. **LangGraph conditional edges** — `route_intent()`, `route_from_pfa()`, `route_from_risk_manager()` dynamically select the next node based on state.
+5. **Hybrid memory** — ChromaDB (semantic + conversation) + PostgreSQL (structured profile/portfolio data).
+6. **JWT auth** — Bearer tokens stored in `localStorage` key `advisor_token`.
 
-The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. This is recommended for users who prefer visual interfaces over command line tools.
+## Disclaimer
 
-Please see detailed instructions on how to install and run the web application [here](https://github.com/virattt/ai-hedge-fund/tree/main/app).
-
-<img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
-
-
-## How to Contribute
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
-
-## Feature Requests
-
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is for **educational and research purposes only**. Not intended for real trading or investment. No investment advice or guarantees provided. Past performance does not indicate future results.
