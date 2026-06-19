@@ -28,6 +28,12 @@ ENV/
 # Environment Variables
 .env
 
+# Vector DB
+.chroma/
+
+# LLM Config
+.opencode/
+
 # IDE
 .idea/
 .vscode/

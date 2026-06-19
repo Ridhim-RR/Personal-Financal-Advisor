@@ -9,6 +9,8 @@ from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.risk_manager import risk_management_agent
 from src.agents.personal_financial_advisor import personal_financial_advisor_agent
 from src.agents.intent_router import intent_router_agent
+from src.agents.ticker_resolver import ticker_resolver_agent
+from src.agents.ticker_validator import ticker_validator_agent
 from src.agents.rag_agent import rag_agent
 from src.agents.stock_discovery_agent import stock_discovery_agent
 from src.agents.portfolio_analysis_agent import portfolio_analysis_agent
@@ -132,6 +134,13 @@ def route_from_risk_manager(state: AgentState) -> str:
     elif intent == "stock_discovery":
         return END
     return "portfolio_manager"
+
+
+def route_from_ticker_validator(state: AgentState):
+    """After ticker_validator: go to PFA if validation passed, END if failed."""
+    if state.get("ticker_resolution_error"):
+        return END
+    return "personal_financial_advisor"
 
 
 def fan_out(state: AgentState):
@@ -308,10 +317,14 @@ def create_personalized_workflow(selected_analysts=None):
 
     Routing paths:
       portfolio_analysis → risk_manager → portfolio_analysis_agent → END
-      stock_analysis     → PFA → [analysts + risk_manager] → portfolio_manager → END
+      stock_analysis     → Ticker Resolver → Ticker Validator → PFA → [analysts + risk_manager] → portfolio_manager → END
       stock_discovery    → stock_discovery_agent → fundamental_analyst → risk_manager → END
       strategy_advice    → PFA → END
       general_finance    → rag_agent → END
+
+    The Ticker Resolver NEVER generates tickers via LLM. It uses fuzzy matching
+    against a knowledge base + ChromaDB RAG. The Ticker Validator verifies
+    every ticker with Yahoo Finance before analyst agents run.
     """
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
@@ -351,10 +364,27 @@ def create_personalized_workflow(selected_analysts=None):
         "rag_agent",
         _logged_agent(rag_agent, "RAG Agent"),
     )
+    workflow.add_node(
+        "ticker_resolver_agent",
+        _logged_agent(ticker_resolver_agent, "Ticker Resolver"),
+    )
+    workflow.add_node(
+        "ticker_validator_agent",
+        _logged_agent(ticker_validator_agent, "Ticker Validator"),
+    )
     workflow.add_node("fan_out_to_analysts", fan_out)
 
     # ── Entry: start_node → intent_router ──
     workflow.add_edge("start_node", "intent_router")
+
+    # ── Ticker Resolver → Ticker Validator (stock_analysis path) ──
+    workflow.add_edge("ticker_resolver_agent", "ticker_validator_agent")
+
+    # ── Ticker Validator → conditional (valid → PFA, invalid → END) ──
+    workflow.add_conditional_edges(
+        "ticker_validator_agent",
+        route_from_ticker_validator,
+    )
 
     # ── Intent Router → conditional entry points ──
     workflow.add_conditional_edges(
@@ -362,7 +392,7 @@ def create_personalized_workflow(selected_analysts=None):
         route_intent,
         {
             "portfolio_analysis": "risk_management_agent",
-            "stock_analysis": "personal_financial_advisor",
+            "stock_analysis": "ticker_resolver_agent",  # was pfa — now goes through ticker resolution
             "stock_discovery": "stock_discovery_agent",
             "strategy_advice": "personal_financial_advisor",
             "general_finance": "rag_agent",

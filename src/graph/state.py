@@ -27,6 +27,10 @@ class AgentState(TypedDict):
 
     # ── Intent Routing ────────────────────────────────────────
     routing_decision: Optional[dict]                           # RoutingDecision from intent_router
+    company_names: list[str]                                   # company names extracted by intent router
+    explicit_tickers: list[str]                                # explicit tickers from user (e.g., "AAPL")
+    ticker_resolution: dict[str, str]                          # company_name → resolved_ticker mapping
+    ticker_resolution_error: Optional[str]                     # error message if resolution fails
 
 
 def show_agent_reasoning(output, agent_name):

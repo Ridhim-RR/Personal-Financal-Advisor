@@ -29,6 +29,32 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
     analyst_signals = state["data"]["analyst_signals"]
     tickers = state["data"]["tickers"]
 
+    # ── Failure guard: no analyst signals → refuse to generate BUY/SELL/HOLD ──
+    non_risk_signals = {
+        k: v for k, v in analyst_signals.items()
+        if not k.startswith("risk_management_agent")
+    }
+    if not non_risk_signals and not state.get("ticker_resolution_error"):
+        # Check if we have at least some data to work with
+        has_data = any(
+            v and isinstance(v, dict) and v.get("signal")
+            for signals in non_risk_signals.values()
+            for v in signals.values()
+        )
+        if not has_data:
+            print(f"\n  [PORTFOLIO_MANAGER] No analyst signals available. Refusing to generate recommendations.")
+            error_message = HumanMessage(
+                content=json.dumps({
+                    "status": "analysis_failed",
+                    "reason": "No market data available — ticker resolution or data retrieval failed.",
+                }),
+                name=agent_id,
+            )
+            return {
+                "messages": state["messages"] + [error_message],
+                "data": state["data"],
+            }
+
     position_limits = {}
     current_prices = {}
     max_shares = {}
