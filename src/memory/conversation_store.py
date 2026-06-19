@@ -4,8 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-import chromadb
-from chromadb.config import Settings
+from src.utils.chroma_client import get_chroma_client
 
 
 class ConversationStore:
@@ -19,13 +18,7 @@ class ConversationStore:
     """
 
     def __init__(self, collection_name: str = "conversations", persist_dir: Optional[str] = None):
-        self.persist_dir = persist_dir or os.path.join(
-            os.path.dirname(__file__), "..", "..", ".chroma"
-        )
-        self.client = chromadb.PersistentClient(
-            path=self.persist_dir,
-            settings=Settings(anonymized_telemetry=False),
-        )
+        self.client = get_chroma_client(persist_dir)
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"},

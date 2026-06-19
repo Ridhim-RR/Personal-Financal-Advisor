@@ -14,9 +14,9 @@ import uuid
 from datetime import datetime
 from typing import Optional, List
 
-import chromadb
-from chromadb.config import Settings
 from chromadb.utils import embedding_functions
+
+from src.utils.chroma_client import get_chroma_client
 
 COLL_CONVERSATION = "conversation_memory"
 
@@ -30,13 +30,7 @@ class ConversationMemoryService:
     """
 
     def __init__(self, persist_dir: Optional[str] = None):
-        self.persist_dir = persist_dir or os.path.join(
-            os.path.dirname(__file__), "..", "..", ".chroma"
-        )
-        self.client = chromadb.PersistentClient(
-            path=self.persist_dir,
-            settings=Settings(anonymized_telemetry=False),
-        )
+        self.client = get_chroma_client(persist_dir)
         self.ef = None
         embed_key = os.getenv("OPENAI_EMBEDDING_API_KEY")
         if embed_key and len(embed_key) > 20 and "your-" not in embed_key:

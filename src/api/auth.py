@@ -7,9 +7,9 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))  # 24h default
+SECRET_KEY = os.getenv("JWT_SECRET", os.getenv("JWT_SECRET_KEY", "change-me-in-production"))
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRATION_MINUTES", os.getenv("JWT_EXPIRE_MINUTES", "1440")))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

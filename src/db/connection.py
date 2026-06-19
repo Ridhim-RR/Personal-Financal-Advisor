@@ -17,10 +17,8 @@ class DatabaseManager:
     """
 
     def __init__(self, database_url: Optional[str] = None):
-        raw_url = database_url or os.getenv("DATABASE_URL")
-        if raw_url and "postgresql" in raw_url:
-            self.database_url = raw_url
-        elif raw_url and raw_url != "postgresql+psycopg2://user:pass@localhost:5432/ai_investment_advisor":
+        raw_url = database_url or os.getenv("DATABASE_URL") or ""
+        if "postgresql" in raw_url or "mysql" in raw_url:
             self.database_url = raw_url
         else:
             # Default to SQLite for local development

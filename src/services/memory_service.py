@@ -13,11 +13,10 @@ import os
 import uuid
 from typing import Optional, List
 
-import chromadb
-from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from langsmith import traceable
 
+from src.utils.chroma_client import get_chroma_client
 
 
 # Collection names
@@ -36,13 +35,7 @@ class MemoryService:
     """
 
     def __init__(self, persist_dir: Optional[str] = None):
-        self.persist_dir = persist_dir or os.path.join(
-            os.path.dirname(__file__), "..", "..", ".chroma"
-        )
-        self.client = chromadb.PersistentClient(
-            path=self.persist_dir,
-            settings=Settings(anonymized_telemetry=False),
-        )
+        self.client = get_chroma_client(persist_dir)
         # Use OpenAI embeddings only if a valid API key is explicitly configured
         # for embeddings (separate from the default LLM key).
         self.ef = None

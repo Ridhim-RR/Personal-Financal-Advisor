@@ -1,10 +1,4 @@
-"""FastAPI application entry point for the Personal AI Investment Advisor.
-
-Run with:
-    fastapi dev src/api/main.py
-    # or
-    uvicorn src.api.main:app --reload
-"""
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,3 +27,9 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": "0.1.0"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", os.getenv("API_PORT", "8000")))
+    uvicorn.run("src.api.main:app", host="0.0.0.0", port=port)

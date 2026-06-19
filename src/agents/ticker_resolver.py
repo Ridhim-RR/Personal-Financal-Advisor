@@ -17,10 +17,9 @@ import difflib
 from typing import Optional
 
 from langsmith import traceable
-import chromadb
-from chromadb.config import Settings
 
 from src.graph.state import AgentState
+from src.utils.chroma_client import get_chroma_client
 
 
 # ── Knowledge Base ─────────────────────────────────────────
@@ -80,11 +79,7 @@ def _fuzzy_match(company_name: str, kb: list[dict], cutoff: float = 0.6) -> Opti
 def _chromadb_search(company_name: str) -> list[dict]:
     """Search ChromaDB company_tickers collection for semantically similar companies."""
     try:
-        persist_dir = os.path.join(os.path.dirname(__file__), "..", "..", ".chroma")
-        client = chromadb.PersistentClient(
-            path=persist_dir,
-            settings=Settings(anonymized_telemetry=False),
-        )
+        client = get_chroma_client()
         collection = client.get_collection("company_tickers")
         results = collection.query(
             query_texts=[company_name],

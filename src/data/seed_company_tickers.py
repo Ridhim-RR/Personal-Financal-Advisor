@@ -9,20 +9,16 @@ company name to ticker symbol resolution.
 
 import json
 import os
-import chromadb
-from chromadb.config import Settings
+
+from src.utils.chroma_client import get_chroma_client
 
 
 COLLECTION_NAME = "company_tickers"
-PERSIST_DIR = os.path.join(os.path.dirname(__file__), "..", "..", ".chroma")
 DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "company_tickers.json")
 
 
 def seed_company_tickers():
-    client = chromadb.PersistentClient(
-        path=PERSIST_DIR,
-        settings=Settings(anonymized_telemetry=False),
-    )
+    client = get_chroma_client()
 
     # Delete existing collection if present
     try:
@@ -69,7 +65,6 @@ def seed_company_tickers():
     )
 
     print(f"  Seeded {len(entries)} company→ticker mappings into '{COLLECTION_NAME}'")
-    print(f"  Persist dir: {PERSIST_DIR}")
 
 
 if __name__ == "__main__":
