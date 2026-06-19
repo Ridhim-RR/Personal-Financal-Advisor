@@ -45,12 +45,11 @@ services:
       dockerfile: docker/Dockerfile
     image: ai-hedge-fund
     container_name: advisor-api
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
     ports:
       - "8000:8000"
     volumes:
       - ../.env:/app/.env
-      - ..:/app
     environment:
       PYTHONPATH: /app
       DATABASE_URL: postgresql+psycopg2://advisor:${POSTGRES_PASSWORD:-change-me}@postgres:5432/advisor
@@ -62,8 +61,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    tty: true
-    stdin_open: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
 volumes:
   postgres_data:

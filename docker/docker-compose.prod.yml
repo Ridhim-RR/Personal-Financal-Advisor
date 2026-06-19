@@ -1,0 +1,141 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: advisor-postgres
+    environment:
+      POSTGRES_DB: advisor
+      POSTGRES_USER: advisor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U advisor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - advisor-net
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: advisor-chroma
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /chroma/chroma
+      ANONYMIZED_TELEMETRY: "FALSE"
+    restart: unless-stopped
+    networks:
+      - advisor-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: advisor-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - advisor-net
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        - PYTHONUNBUFFERED=1
+    image: personal-financial-advisor-api
+    container_name: advisor-api
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+    expose:
+      - "8000"
+    env_file:
+      - ../.env
+    environment:
+      PYTHONPATH: /app
+      DATABASE_URL: postgresql+psycopg2://advisor:${POSTGRES_PASSWORD}@postgres:5432/advisor
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - advisor-net
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        - NEXT_PUBLIC_API_BASE=/api/v1
+    image: personal-financial-advisor-frontend
+    container_name: advisor-frontend
+    expose:
+      - "3000"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - advisor-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: advisor-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - advisor-net
+
+  ollama:
+    profiles:
+      - ollama
+    image: ollama/ollama:latest
+    container_name: advisor-ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama_data:/root/.ollama
+    expose:
+      - "11434"
+    restart: unless-stopped
+    networks:
+      - advisor-net
+
+volumes:
+  postgres_data:
+  chroma_data:
+  ollama_data:
+
+networks:
+  advisor-net:
+    name: advisor-network
+    driver: bridge

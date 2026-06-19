@@ -1,6 +1,6 @@
 import type { AuthResponse, ChatRequest, ChatResponse, Holding, Recommendation, User, UserProfile, Watchlist } from "@/types"
 
-const API_BASE = "http://localhost:8000/api/v1"
+const API_BASE = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE) || "http://localhost:8000/api/v1"
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null
